@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gốm Music Pro - Admin & Library</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --accent: #6366f1; --bg: #f8fafc; }
+        body { background: var(--bg); font-family: 'Segoe UI', sans-serif; padding-bottom: 140px; }
+        
+        /* Sidebar & Items */
+        .sidebar { background: #fff; border-right: 1px solid #e2e8f0; height: 100vh; position: sticky; top: 0; }
+        .p-item { border: none; padding: 12px; border-radius: 10px; cursor: pointer; transition: 0.2s; margin-bottom: 5px; position: relative; }
+        .p-item:hover { background: #f1f5f9; }
+        .p-item.active { background: #000; color: #fff; }
+        .p-item.drop-hover { background: #22c55e !important; color: #fff !important; transform: scale(1.02); }
+
+        /* Song Card */
+        .s-item { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; cursor: grab; transition: 0.2s; position: relative; }
+        .s-item:hover { border-color: var(--accent); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .admin-only { display: none; } /* Ẩn mặc định */
+
+        /* Search & Player */
+        .search-box { border-radius: 12px; border: 1px solid #e2e8f0; padding: 10px 15px 10px 40px; }
+        #player-bar { position: fixed; bottom: 15px; left: 50%; transform: translateX(-50%); width: 95%; max-width: 900px; 
+                       background: rgba(255,255,255,0.95); backdrop-filter: blur(15px); border-radius: 20px; padding: 15px 30px; 
+                       box-shadow: 0 10px 30px rgba(0,0,0,0.1); z-index: 1000; border: 1px solid rgba(255,255,255,0.3); }
+
+        /* Helpers */
+        .handle { cursor: move; color: #cbd5e1; margin-right: 10px; }
+        .ui-draggable-dragging { z-index: 9999; width: 250px; background: #000 !important; color: #fff !important; opacity: 0.9; }
+        
+        /* Custom Progress Seekbar */
+        .progress-container { cursor: pointer; height: 5px; background: #e2e8f0; border-radius: 5px; position: relative; transition: height 0.1s; }
+        .progress-container:hover { height: 8px; }
+        .progress-bar-fill { height: 100%; background: var(--accent); width: 0%; border-radius: 5px; transition: width 0.1s linear; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-3 sidebar p-4 d-flex flex-column">
+            <h4 class="fw-bold mb-4 text-primary"><i class="fas fa-wave-square me-2"></i>Gốm Music</h4>
+            
+            <div class="flex-grow-1">
+                <button class="btn btn-dark w-100 mb-4 py-2 shadow-sm" id="btnLibrary">
+                    <i class="fas fa-th-large me-2"></i>Thư viện hệ thống
+                </button>
+
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="text-muted small fw-bold">PLAYLISTS</span>
+                    <button class="btn btn-sm btn-outline-primary border-0 admin-only" id="addP"><i class="fas fa-plus"></i></button>
+                </div>
+                <div id="p-list"></div>
+            </div>
+
+            <div class="border-top pt-3 mt-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="adminToggle">
+                    <label class="form-check-label small fw-bold" for="adminToggle">CHẾ ĐỘ QUẢN TRỊ</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-9 p-4">
+            <div class="position-relative mb-4">
+                <i class="fas fa-search position-absolute" style="left: 15px; top: 14px; color: #94a3b8;"></i>
+                <input type="text" class="form-control search-box shadow-none" id="searchInput" placeholder="Tìm tên bài hát, ca sĩ...">
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 id="viewTitle" class="fw-bold mb-1">Đang tải...</h2>
+                    <span id="songCount" class="text-muted small">0 songs</span>
+                </div>
+                <button class="btn btn-primary admin-only shadow-sm" id="addS"><i class="fas fa-plus me-2"></i>Thêm bài hát mới</button>
+            </div>
+
+            <div id="s-list" class="row g-3">
+                </div>
+        </div>
+    </div>
+</div>
+
+<div id="player-bar" class="d-flex flex-column gap-2">
+    <div class="d-flex align-items-center gap-2 width-100">
+        <span id="currentTime" class="text-muted small" style="min-width: 35px;">0:00</span>
+        <div class="progress-container flex-grow-1" id="progressContainer">
+            <div class="progress-bar-fill" id="progressBar"></div>
+        </div>
+        <span id="duration" class="text-muted small" style="min-width: 35px;">0:00</span>
+    </div>
+
+    <div class="d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center" style="min-width: 0; flex: 1;">
+            <div class="bg-primary text-white rounded-3 d-flex align-items-center justify-content-center me-3" style="width:48px; height:48px; flex-shrink: 0;">
+                <i class="fas fa-music"></i>
+            </div>
+            <div class="text-truncate">
+                <div id="trackTitle" class="fw-bold small text-truncate">Chưa chọn bài</div>
+                <div id="trackArtist" class="text-muted small text-truncate">...</div>
+            </div>
+        </div>
+        
+        <div class="d-flex align-items-center justify-content-center px-4" style="flex: 1;">
+            <button class="btn btn-link text-dark" id="prev"><i class="fas fa-step-backward"></i></button>
+            <button class="btn btn-dark rounded-circle mx-3 shadow" id="play" style="width:50px; height:50px"><i class="fas fa-play"></i></button>
+            <button class="btn btn-link text-dark" id="next"><i class="fas fa-step-forward"></i></button>
+        </div>
+
+        <div class="d-flex align-items-center justify-content-end" style="width: 200px; flex: 1;">
+            <i class="fas fa-volume-down me-2 text-muted"></i>
+            <input type="range" class="form-range" id="vol" min="0" max="100" value="100">
+        </div>
+    </div>
+    <audio id="audio"></audio>
+</div>
+
+<div class="modal fade" id="mainModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <form id="mainForm" class="modal-content border-0 shadow-lg">
+            <div class="modal-header border-0 pb-0"><h5 class="fw-bold" id="mTitle">Tiêu đề</h5></div>
+            <div class="modal-body" id="mBody"></div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button>
+                <button type="submit" class="btn btn-primary px-4">Xác nhận</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+const API = "https://671f28b2e7a5da195283f511.mockapi.io/api/v1"; 
+let allSongs = []; 
+let currentSongs = []; 
+let currentPid = null;
+let isAdmin = false;
+let currentIndex = 0;
+const audio = document.getElementById('audio');
+
+// Đã cập nhật toàn bộ danh sách file nhạc mới của bạn
+const mockBackupSongs = [
+    { id: "mock1", title: "VẾT THƯƠNG", artist: "fishy", url: "fishy - VẾT THƯƠNG - OFFICIAL MUSIC VIDEO [LIKOvbJ-DZg].mp3" },
+    { id: "mock2", title: "Tìm em", artist: "Hngle ft. Bảo Anh", url: "Hngle - Tìm em ft. Bảo Anh _ Official Music Video [gJAbDSse5WM].mp3" },
+    { id: "mock3", title: "BÔNG HOA ĐẸP NHẤT", artist: "QUÂN A.P", url: "QUÂN A.P _ BÔNG HOA ĐẸP NHẤT _ OFFICIAL MUSIC VIDEO [fTXd-DpN3AI].mp3" },
+    { id: "mock4", title: "Đừng Đóng Vai Anh", artist: "PHD", url: "PHD - Đừng Đóng Vai Anh(Audio) (Official Audio) [X-ukyXPDois].mp3" },
+    { id: "mock5", title: "Read All About It", artist: "Professor Green ft. Emeli Sandé", url: "Read All About It [bAGoDV63Y-Q].mp3" },
+    { id: "mock6", title: "Back to friends", artist: "sombr", url: "sombr - back to friends (official video) [c8zq4kAn_O0].mp3" },
+    { id: "mock7", title: "THIÊN MỆNH", artist: "QUÂN A.P ft HẢI ĐĂNG DOO", url: "🪽THIÊN MỆNH🪽_ QUÂN A.P ft HẢI ĐĂNG DOO _ OFFICIAL MV [CdRyfr7WAGs].mp3" },
+    { id: "mock8", title: "50 Feet", artist: "SoMo", url: "SoMo - 50 Feet (lyrics) [G7F1eEKhvrs].mp3" },
+    { id: "mock9", title: "3 Strikes", artist: "Terror Jr", url: "3 Strikes [yJu4MD2hagI].mp3" },
+    { id: "mock10", title: "In Love", artist: "Low G ft. JustaTee", url: "Low G _ In Love (ft. JustaTee) _ ‘L2K’ The Album [T7ksmtaVeOk].mp3" }
+];
+
+$(document).ready(function() {
+    init();
+
+    // 1. ADMIN TOGGLE
+    $('#adminToggle').change(function() {
+        isAdmin = $(this).is(':checked');
+        $('.admin-only').toggle(isAdmin);
+        loadPlaylists().then(() => renderPlaylists());
+        renderSongs(currentPid ? "Playlist" : "Thư viện nhạc");
+    });
+
+    async function init() {
+        await loadPlaylists();
+        await goLibrary();
+    }
+
+    // 2. PLAYLIST LOGIC
+    async function loadPlaylists() {
+        try {
+            const res = await fetch(`${API}/playlists`);
+            const data = await res.json();
+            renderPlaylists(data);
+        } catch(e) {
+            renderPlaylists([{id: 1, name: "Thư viện gốc"}, {id: 2, name: "Nhạc Trẻ Hot"}]);
+        }
+    }
+
+    function renderPlaylists(data) {
+        if(!data) return;
+        let html = data.map(p => `
+            <div class="p-item d-flex justify-content-between align-items-center ${currentPid==p.id?'active':''}" data-id="${p.id}">
+                <span class="text-truncate me-2"><i class="fas fa-music me-2 opacity-50"></i>${p.name}</span>
+                <i class="fas fa-times-circle text-danger admin-only" style="display:${isAdmin?'block':'none'}" onclick="deleteP(${p.id})"></i>
+            </div>
+        `).join('');
+        $('#p-list').html(html);
+        setupDroppable();
+    }
+
+    // 3. SONG LOGIC
+    async function goLibrary() {
+        currentPid = null;
+        $('.p-item').removeClass('active');
+        try {
+            const res = await fetch(`${API}/playlists/1/songs`);
+            allSongs = await res.json();
+            if(!allSongs || allSongs.length === 0) allSongs = [...mockBackupSongs];
+        } catch(e) {
+            allSongs = [...mockBackupSongs];
+        }
+        currentSongs = [...allSongs];
+        renderSongs("Thư viện hệ thống");
+    }
+
+    function renderSongs(title) {
+        $('#viewTitle').text(title);
+        $('#songCount').text(`${currentSongs.length} bài hát`);
+        
+        let html = currentSongs.map((s, i) => `
+            <div class="col-md-6 col-lg-4 song-card-wrapper">
+                <div class="s-item d-flex align-items-center" data-id="${s.id}" 
+                     data-title="${s.title}" data-artist="${s.artist}" data-url="${s.url}">
+                    ${isAdmin && currentPid ? '<i class="fas fa-bars handle admin-only" style="display:block"></i>' : ''}
+                    <div class="flex-grow-1 text-truncate" onclick="playTrack(${i})">
+                        <div class="fw-bold small text-truncate">${s.title}</div>
+                        <div class="text-muted" style="font-size:11px">${s.artist}</div>
+                    </div>
+                    <button class="btn btn-sm text-danger border-0 admin-only" style="display:${isAdmin?'block':'none'}" onclick="deleteS(${s.id})">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+        
+        $('#s-list').html(html || '<p class="text-muted p-3">Trống</p>');
+        setupDraggable();
+        if(isAdmin && currentPid) setupSortable();
+    }
+
+    // 4. KÉO THẢ (JQUERY UI)
+    function setupDraggable() {
+        $(".s-item").draggable({
+            revert: "invalid", helper: "clone", cursor: "move",
+            start: function() { $(this).hide(); },
+            stop: function() { $(this).show(); }
+        });
+    }
+
+    function setupDroppable() {
+        $(".p-item").droppable({
+            accept: ".s-item",
+            hoverClass: "drop-hover",
+            drop: async function(e, ui) {
+                const targetPid = $(this).data('id');
+                const songData = {
+                    title: ui.draggable.data('title'),
+                    artist: ui.draggable.data('artist'),
+                    url: ui.draggable.data('url'),
+                    playlistId: targetPid
+                };
+                await fetch(`${API}/playlists/${targetPid}/songs`, {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify(songData)
+                });
+                alert("Đã thêm vào playlist!");
+            }
+        });
+    }
+
+    function setupSortable() {
+        $("#s-list").sortable({ handle: ".handle", placeholder: "col-md-6 col-lg-4 mb-2 border-primary" });
+    }
+
+    // 5. SEARCH
+    $('#searchInput').on('input', function() {
+        const query = $(this).val().toLowerCase();
+        const pool = currentPid ? currentSongs : allSongs;
+        const filtered = pool.filter(s => s.title.toLowerCase().includes(query) || s.artist.toLowerCase().includes(query));
+        
+        let original = currentSongs;
+        currentSongs = filtered;
+        renderSongs(currentPid ? "Kết quả lọc" : "Thư viện nhạc");
+        currentSongs = original;
+    });
+
+    // 6. EVENT HANDLERS
+    $('#btnLibrary').click(goLibrary);
+
+    $(document).on('click', '.p-item', async function() {
+        currentPid = $(this).data('id');
+        $('.p-item').removeClass('active');
+        $(this).addClass('active');
+        try {
+            const res = await fetch(`${API}/playlists/${currentPid}/songs`);
+            currentSongs = await res.json();
+        } catch(e) {
+            currentSongs = [...mockBackupSongs];
+        }
+        renderSongs($(this).find('span').text());
+    });
+
+    // CRUD ACTIONS
+    $('#addP').click(() => {
+        $('#mTitle').text("Tạo Playlist mới");
+        $('#mBody').html('<input type="text" id="inpP" class="form-control shadow-none" placeholder="Tên playlist..." required>');
+        $('#mainModal').modal('show');
+    });
+
+    $('#addS').click(() => {
+        $('#mTitle').text("Thêm nhạc vào Thư viện");
+        $('#mBody').html(`
+            <input type="text" id="iT" class="form-control mb-2 shadow-none" placeholder="Tên bài hát" required>
+            <input type="text" id="iA" class="form-control mb-2 shadow-none" placeholder="Ca sĩ" required>
+            <input type="url" id="iU" class="form-control shadow-none" placeholder="Link nhạc .mp3" required>
+        `);
+        $('#mainModal').modal('show');
+    });
+
+    $('#mainForm').submit(async function(e) {
+        e.preventDefault();
+        const isS = $('#iT').length > 0;
+        const data = isS ? { title:$('#iT').val(), artist:$('#iA').val(), url:$('#iU').val() } : { name:$('#inpP').val() };
+        const url = isS ? `${API}/playlists/1/songs` : `${API}/playlists`;
+        
+        try {
+            await fetch(url, {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify(data)
+            });
+        } catch(e) {}
+        $('#mainModal').modal('hide');
+        isS ? goLibrary() : loadPlaylists();
+    });
+
+    window.deleteP = async (id) => {
+        if(confirm("Xóa playlist này?")) {
+            await fetch(`${API}/playlists/${id}`, {method:'DELETE'});
+            loadPlaylists();
+        }
+    };
+
+    window.deleteS = async (id) => {
+        await fetch(`${API}/playlists/${currentPid || 1}/songs/${id}`, {method:'DELETE'});
+        currentPid ? $('.p-item.active').click() : goLibrary();
+    };
+
+    // 7. PLAYER ACTIONS
+    window.playTrack = (i) => {
+        if(currentSongs.length === 0) return;
+        currentIndex = i;
+        const s = currentSongs[currentIndex];
+        audio.src = s.url;
+        audio.play().catch(error => console.log("Lỗi tự động phát:", error));
+        $('#trackTitle').text(s.title);
+        $('#trackArtist').text(s.artist);
+        $('#play').html('<i class="fas fa-pause"></i>');
+    };
+
+    $('#play').click(() => {
+        if(audio.src) {
+            if(audio.paused) { audio.play(); $('#play').html('<i class="fas fa-pause"></i>'); }
+            else { audio.pause(); $('#play').html('<i class="fas fa-play"></i>'); }
+        } else {
+            playTrack(0);
+        }
+    });
+
+    $('#next').click(() => { currentIndex = (currentIndex + 1) % currentSongs.length; playTrack(currentIndex); });
+    $('#prev').click(() => { currentIndex = (currentIndex - 1 + currentSongs.length) % currentSongs.length; playTrack(currentIndex); });
+    
+    $('#vol').on('input', function() { audio.volume = $(this).val() / 100; });
+    audio.onended = () => $('#next').click();
+
+    function formatTime(secs) {
+        if (isNaN(secs)) return "0:00";
+        let minutes = Math.floor(secs / 60);
+        let seconds = Math.floor(secs % 60);
+        if (seconds < 10) seconds = "0" + seconds;
+        return minutes + ":" + seconds;
+    }
+
+    // Cập nhật thanh tiến trình theo thời gian thực
+    audio.ontimeupdate = () => {
+        if (audio.duration) {
+            const progressPercent = (audio.currentTime / audio.duration) * 100;
+            $('#progressBar').css('width', `${progressPercent}%`);
+            $('#currentTime').text(formatTime(audio.currentTime));
+        }
+    };
+
+    audio.onloadedmetadata = () => {
+        $('#duration').text(formatTime(audio.duration));
+    };
+
+    // Sự kiện xử lý tua nhạc trực tiếp trên thanh Tiến trình
+    $('#progressContainer').click(function(e) {
+        if (!audio.duration) return;
+        const containerWidth = $(this).width();
+        const clickPositionX = e.offsetX;
+        const newTime = (clickPositionX / containerWidth) * audio.duration;
+        audio.currentTime = newTime;
+    });
+});
+</script>
+</body>
+</html>
